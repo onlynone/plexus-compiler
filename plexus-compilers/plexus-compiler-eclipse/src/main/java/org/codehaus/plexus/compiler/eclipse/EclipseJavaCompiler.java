@@ -60,7 +60,9 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
@@ -348,6 +350,22 @@ public class EclipseJavaCompiler
     // Classes
     // ----------------------------------------------------------------------
 
+    private static class PackageAccessibleClassLoader
+        extends ClassLoader {
+
+        public PackageAccessibleClassLoader(ClassLoader parent) {
+            super(parent);
+        }
+
+        public Package getPackage(String name) {
+            return super.getPackage(name);
+        }
+
+        public Package[] getPackages() {
+            return super.getPackages();
+        }
+    }
+
     private class CompilationUnit
         implements ICompilationUnit
     {
@@ -454,12 +472,31 @@ public class EclipseJavaCompiler
 
         private List<CompilerMessage> errors;
 
+        private Set<String> classLoaderPackages;
+
         public EclipseCompilerINameEnvironment( SourceCodeLocator sourceCodeLocator, ClassLoader classLoader,
                                                 List<CompilerMessage> errors )
         {
             this.sourceCodeLocator = sourceCodeLocator;
             this.classLoader = classLoader;
             this.errors = errors;
+            PackageAccessibleClassLoader pacl =
+                new PackageAccessibleClassLoader(classLoader);
+
+            Package[] packages = pacl.getPackages();
+
+            this.classLoaderPackages = new HashSet<String>();
+
+            for(int i = 0; i < packages.length; i++) {
+                String[] parts = packages[i].getName().split("\\.");
+                String packageName = "";
+                for(int j = 0; j < parts.length ; j++) {
+                    packageName += parts[j];
+                    this.classLoaderPackages.add(packageName);
+                    packageName += ".";
+                }
+                // this.classLoaderPackages.add(packages[i].getName());
+            }
         }
 
         public NameEnvironmentAnswer findType( char[][] compoundTypeName )
@@ -542,16 +579,17 @@ public class EclipseJavaCompiler
 
         private boolean isPackage( String result )
         {
-            if ( sourceCodeLocator.findSourceCodeForClass( result ) != null )
-            {
-                return false;
+            if (this.classLoaderPackages.contains(result)) {
+                return true;
             }
 
-            String resourceName = "/" + result.replace( '.', '/' ) + ".class";
+            if (sourceCodeLocator.isPackage(result)) {
+                return true;
+            }
 
-            InputStream is = classLoader.getResourceAsStream( resourceName );
-
-            return is == null;
+            //return this.classLoaderPackages.contains(result) ||
+            //    sourceCodeLocator.isPackage(result);
+            return false;
         }
 
         public boolean isPackage( char[][] parentPackageName, char[] packageName )
@@ -568,11 +606,6 @@ public class EclipseJavaCompiler
                     result += new String( parentPackageName[i] );
                     sep = ".";
                 }
-            }
-
-            if ( Character.isUpperCase( packageName[0] ) )
-            {
-                return false;
             }
 
             String str = new String( packageName );

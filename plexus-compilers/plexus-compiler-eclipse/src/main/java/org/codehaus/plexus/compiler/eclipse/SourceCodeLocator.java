@@ -71,12 +71,18 @@ public class SourceCodeLocator
         {
             File f = new File( root, s );
 
-            if ( f.exists() )
+            if ( f.exists() && f.getAbsolutePath().endsWith("/" + s) )
             {
                 return f;
             }
         }
 
         return null;
+    }
+
+    public Boolean isPackage(String packageName) {
+        File potentialPackageDirectory = findInRoots(packageName.replace('.', '/'));
+        return potentialPackageDirectory != null &&
+            potentialPackageDirectory.isDirectory();
     }
 }
